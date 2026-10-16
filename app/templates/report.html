@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incident Threat Investigation Report — {{ capture.original_filename }}</title>
+  <style>
+    :root {
+      --primary: #0f172a;
+      --accent: #0284c7;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --bg-alt: #f8fafc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background-color: #ffffff;
+      line-height: 1.5;
+      padding: 2.5rem;
+    }
+
+    .report-header {
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 0.35rem;
+    }
+
+    .subtitle {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .badge-report {
+      display: inline-block;
+      padding: 0.25rem 0.65rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-critical { background: #fee2e2; color: #b91c1c; border: 1px solid #f87171; }
+    .badge-high { background: #ffedd5; color: #c2410c; border: 1px solid #fb923c; }
+    .badge-medium { background: #fef9c3; color: #a16207; border: 1px solid #facc15; }
+    .badge-low { background: #dbeafe; color: #1d4ed8; border: 1px solid #60a5fa; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      margin-bottom: 2rem;
+      font-size: 0.85rem;
+    }
+
+    .meta-item span { color: var(--text-muted); display: block; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.2rem; }
+    .meta-item strong { color: var(--primary); font-size: 1rem; }
+
+    h2 {
+      font-size: 1.25rem;
+      color: var(--primary);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .summary-box {
+      background: var(--bg-alt);
+      border-left: 4px solid var(--accent);
+      padding: 1rem 1.25rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 2rem;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .alert-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+      page-break-inside: avoid;
+    }
+
+    .alert-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .alert-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .alert-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+
+    .table th, .table td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+
+    .table th { background: var(--bg-alt); color: var(--primary); }
+
+    .disclaimer {
+      margin-top: 3rem;
+      padding: 1.25rem;
+      border: 1px solid #cbd5e1;
+      background: #f1f5f9;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      color: #475569;
+      line-height: 1.6;
+    }
+
+    .action-bar {
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    .btn-print {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    @media print {
+      body { padding: 0.5cm; }
+      .action-bar { display: none; }
+      .alert-card { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="action-bar">
+    <a href="{{ url_for('main.dashboard') }}" style="text-decoration: none; color: var(--text-muted); font-size: 0.9rem; margin-right: auto; align-self: center;">
+      &larr; Return to Dashboard
+    </a>
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+
+  <header class="report-header">
+    <div>
+      <h1 class="title">Incident & Threat Investigation Report</h1>
+      <p class="subtitle">Platform: NetworkThreatHunter &bull; Automated Heuristic & Flow Analysis</p>
+    </div>
+    <div style="text-align: right;">
+      <span style="font-size: 0.8rem; color: var(--text-muted);">Report Generated (UTC)</span><br>
+      <strong>{{ capture.created_at }}</strong>
+    </div>
+  </header>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <span>Capture Filename</span>
+      <strong>{{ capture.original_filename }}</strong>
+    </div>
+    <div class="meta-item">
+      <span>Packets Analyzed</span>
+      <strong>{{ stats.total_packets }} Frames</strong>
+    </div>
+    <div class="meta-item">
+      <span>Observed Traffic</span>
+      <strong>{{ stats.total_bytes | filesizeformat }}</strong>
+    </div>
+    <div class="meta-item">
+      <span>Duration</span>
+      <strong>{{ stats.duration_seconds }} seconds</strong>
+    </div>
+  </div>
+
+  <h2>1. Executive Summary</h2>
+  <div class="summary-box">
+    Analysis of capture file <strong>{{ capture.original_filename }}</strong> identified <strong>{{ alerts | length }} threat indicators</strong> across the network stream. 
+    Total observed throughput comprised {{ stats.total_packets }} packets spanning {{ stats.unique_src_ips }} unique source hosts and {{ stats.unique_dst_ips }} unique destination hosts.
+    {% if alerts %}
+      High-priority indicators require verification by security operations to determine if observed patterns represent authorized administrative activities or malicious actions.
+    {% else %}
+      No anomalous heuristics were triggered within the observed packet sample.
+    {% endif %}
+  </div>
+
+  <h2>2. Threat Hunting Findings</h2>
+  {% for a in alerts %}
+    <div class="alert-card">
+      <div class="alert-header">
+        <div>
+          <span style="font-family: monospace; font-weight: 700; color: var(--accent);">[{{ a.rule_id }}]</span>
+          <span class="alert-title">{{ a.rule_name }}</span>
+        </div>
+        <span class="badge-report badge-{{ a.severity | lower }}">{{ a.severity }}</span>
+      </div>
+
+      <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">
+        <strong>Trigger Summary:</strong> {{ a.trigger_summary }}
+      </p>
+
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        <strong>Timestamp Range:</strong> {{ a.timestamp_range }} &bull;
+        <strong>Evidence Packets:</strong> {{ a.packet_indices | length }} frames &bull;
+        <strong>Analyst Status:</strong> {{ a.status }}
+      </div>
+
+      <div class="alert-grid">
+        <div style="background: var(--bg-alt); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border);">
+          <strong style="color: var(--primary); display: block; margin-bottom: 0.25rem;">Rationale:</strong>
+          {{ a.rationale }}
+        </div>
+        <div style="background: var(--bg-alt); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border);">
+          <strong style="color: var(--primary); display: block; margin-bottom: 0.25rem;">Investigation Recommendations:</strong>
+          {{ a.recommendations }}
+        </div>
+      </div>
+
+      {% if a.analyst_notes %}
+        <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: #f0fdf4; border-left: 3px solid #22c55e; font-size: 0.85rem;">
+          <strong>Analyst Notes:</strong> {{ a.analyst_notes }}
+        </div>
+      {% endif %}
+    </div>
+  {% else %}
+    <p style="color: var(--text-muted); font-size: 0.9rem;">No threat findings triggered.</p>
+  {% endfor %}
+
+  <h2>3. Network Telemetry & Protocol Profile</h2>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <div>
+      <h3 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Protocol Distribution</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Protocol</th>
+            <th>Packets</th>
+            <th>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in stats.protocol_distribution %}
+            <tr>
+              <td><strong>{{ p.protocol }}</strong></td>
+              <td>{{ p.count }}</td>
+              <td>{{ p.percentage }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h3 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Top Observed Ports</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Port</th>
+            <th>Service</th>
+            <th>Packets</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pt in stats.top_ports[:5] %}
+            <tr>
+              <td><strong>{{ pt.port }}</strong></td>
+              <td>{{ pt.service }}</td>
+              <td>{{ pt.count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>DISCLAIMER & LIMITATIONS:</strong>
+    Alerts produced by NetworkThreatHunter are deterministic heuristic indicators intended to guide authorized defensive security investigations. 
+    They do NOT constitute proof of compromise, system breach, or malware infection without secondary forensic validation. 
+    Legitimate vulnerability scanners, network diagnostic tools, cloud microservices, and specialized internal enterprise software can generate identical traffic patterns.
+    Raw payload data has been truncated in this report to avoid exposing confidential strings.
+  </div>
+</body>
+</html>

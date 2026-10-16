@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}NetworkThreatHunter — Traffic Analysis & Threat Hunting{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <!-- SOC Navbar -->
+  <header class="navbar">
+    <div style="display: flex; align-items: center; gap: 1.5rem;">
+      <a href="{{ url_for('main.dashboard') }}" class="nav-brand">
+        <span class="brand-icon">🛡️</span>
+        <span>Network<span style="color: var(--accent-cyan);">ThreatHunter</span></span>
+        <span class="pulse-badge"><span class="pulse-dot"></span>SOC ONLINE</span>
+      </a>
+
+      <nav>
+        <ul class="nav-links">
+          <li>
+            <a href="{{ url_for('main.dashboard') }}" class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+              📊 Dashboard
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('explorer.explorer') }}" class="nav-link {% if request.endpoint == 'explorer.explorer' %}active{% endif %}">
+              🔍 Packet Explorer
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('alerts.alerts_list') }}" class="nav-link {% if request.endpoint in ('alerts.alerts_list', 'alerts.alert_detail') %}active{% endif %}">
+              ⚡ Threat Hunting
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('alerts.investigate_page') }}" class="nav-link {% if request.endpoint == 'alerts.investigate_page' %}active{% endif %}">
+              🎯 IP Investigator
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('exports.incident_report') }}" class="nav-link {% if request.endpoint == 'exports.incident_report' %}active{% endif %}">
+              📑 Incident Report
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+
+    <div class="nav-actions">
+      {% if capture %}
+        <span class="badge" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3);">
+          📁 {{ capture.original_filename }} ({{ capture.packet_count }} pkts)
+        </span>
+      {% else %}
+        <span class="badge" style="background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3);">
+          No Capture Active
+        </span>
+      {% endif %}
+
+      <button type="button" id="open-upload-modal" class="btn btn-secondary btn-sm">
+        ⬆️ Upload PCAP
+      </button>
+
+      <form action="{{ url_for('main.load_demo') }}" method="POST" style="display: inline;">
+        <button type="submit" class="btn btn-accent btn-sm" title="Analyze synthetic demonstration PCAP">
+          ⚡ Demo Traffic
+        </button>
+      </form>
+
+      {% if capture %}
+        <form action="{{ url_for('main.clear_history') }}" method="POST" style="display: inline;" onsubmit="return confirm('Clear current analysis and temporary files?');">
+          <button type="submit" class="btn btn-danger btn-sm" title="Clear analysis history">
+            🗑️ Clear
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-container">
+          {% for category, message in messages %}
+            <div class="flash-msg flash-{{ category }}">
+              <span>{{ message }}</span>
+              <button class="flash-close">&times;</button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Upload Modal -->
+  <div id="upload-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="card-title">Upload Packet Capture</h3>
+        <button type="button" class="flash-close" data-close-modal>&times;</button>
+      </div>
+      <form action="{{ url_for('main.upload_pcap') }}" method="POST" enctype="multipart/form-data">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Select a network capture file (<code style="color: var(--accent-cyan);">.pcap</code> or <code style="color: var(--accent-cyan);">.pcapng</code>) for offline inspection. Max upload size: 25 MB.
+          </p>
+
+          <div style="border: 2px dashed var(--border-color); border-radius: 8px; padding: 1.5rem; text-align: center; background: #0c1220;">
+            <input type="file" name="pcap_file" id="pcap_file" accept=".pcap,.pcapng" required style="font-size: 0.85rem; color: var(--text-muted);">
+          </div>
+
+          <div style="margin-top: 1rem; font-size: 0.75rem; color: var(--text-dim);">
+            🔒 <strong>Privacy Assurance:</strong> All capture files are processed 100% locally on localhost. No packets, payloads, or IP addresses are sent to external cloud APIs or servers.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Start Analysis</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Deep Packet Inspect Modal (Used across views) -->
+  <div id="packet-inspect-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="inspect-modal-title" class="card-title">Packet Inspection</h3>
+        <button type="button" class="flash-close" data-close-modal>&times;</button>
+      </div>
+      <div id="inspect-details" class="modal-body">
+        <!-- Dynamically injected -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>
+      <strong>NetworkThreatHunter</strong> — Defensive Threat Hunting Platform &bull; Local Offline Mode
+    </div>
+    <div>
+      Engineered for Defensible Security &bull; Scapy Parser Engine &bull; Zero External Network Calls
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

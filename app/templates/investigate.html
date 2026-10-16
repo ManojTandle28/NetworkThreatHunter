@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}IP Endpoint Investigator — NetworkThreatHunter{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">🎯 IP Endpoint Threat Investigator</h3>
+    <span style="font-size: 0.8rem; color: var(--text-dim);">Deep-dive communication profiling for individual network endpoints</span>
+  </div>
+
+  <!-- IP Selector Form -->
+  <form action="{{ url_for('alerts.investigate_page') }}" method="GET" style="display: flex; gap: 0.75rem; align-items: center; background: #0c1220; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+    <div style="flex: 1; max-width: 400px;">
+      <select name="ip" class="form-control" style="width: 100%;">
+        <option value="">-- Select an Observed IP Address to Profile --</option>
+        {% for ip in all_ips %}
+          <option value="{{ ip }}" {% if ip == selected_ip %}selected{% endif %}>{{ ip }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-sm">
+      Investigate Endpoint
+    </button>
+  </form>
+
+  {% if selected_ip and details %}
+    <!-- Host Profile Overview -->
+    <div class="stats-grid" style="margin-bottom: 1.25rem;">
+      <div class="stat-card">
+        <span class="stat-label">Investigated IP</span>
+        <span class="stat-value" style="font-size: 1.35rem; color: var(--accent-cyan); font-family: monospace;">
+          {{ details.ip }}
+        </span>
+        <span class="stat-subtext">Active Endpoint Entity</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">Transmitted (Outbound)</span>
+        <span class="stat-value" style="font-size: 1.35rem;">
+          {{ details.packets_sent }} <span style="font-size: 0.85rem; color: var(--text-dim);">pkts</span>
+        </span>
+        <span class="stat-subtext">{{ details.bytes_sent | filesizeformat }} outbound volume</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">Received (Inbound)</span>
+        <span class="stat-value" style="font-size: 1.35rem;">
+          {{ details.packets_received }} <span style="font-size: 0.85rem; color: var(--text-dim);">pkts</span>
+        </span>
+        <span class="stat-subtext">{{ details.bytes_received | filesizeformat }} inbound volume</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">Associated Alerts</span>
+        <span class="stat-value" style="font-size: 1.35rem; color: {% if details.related_alerts %}#f87171{% else %}#34d399{% endif %};">
+          {{ details.related_alerts | length }}
+        </span>
+        <span class="stat-subtext">Threat rules triggered</span>
+      </div>
+    </div>
+
+    <!-- Communication Partners (Outbound vs Inbound) -->
+    <div class="grid-2">
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h4 class="card-title">📤 Outbound Contacted Peers</h4>
+          <span style="font-size: 0.72rem; color: var(--text-dim);">Endpoints contacted by {{ details.ip }}</span>
+        </div>
+        <div class="table-responsive">
+          <table class="soc-table">
+            <thead>
+              <tr>
+                <th>Peer IP</th>
+                <th>Packets</th>
+                <th>Bytes</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in details.peers_outbound %}
+                <tr>
+                  <td style="font-family: monospace; font-weight: 600; color: #38bdf8;">{{ p.peer }}</td>
+                  <td style="font-family: monospace;">{{ p.packets }}</td>
+                  <td style="font-family: monospace;">{{ p.bytes | filesizeformat }}</td>
+                  <td>
+                    <a href="{{ url_for('alerts.investigate_page', ip=p.peer) }}" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;">
+                      Pivot &rarr;
+                    </a>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="4" style="color: var(--text-dim); text-align: center;">No outbound communication peers observed.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h4 class="card-title">📥 Inbound Senders</h4>
+          <span style="font-size: 0.72rem; color: var(--text-dim);">Endpoints communicating to {{ details.ip }}</span>
+        </div>
+        <div class="table-responsive">
+          <table class="soc-table">
+            <thead>
+              <tr>
+                <th>Peer IP</th>
+                <th>Packets</th>
+                <th>Bytes</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in details.peers_inbound %}
+                <tr>
+                  <td style="font-family: monospace; font-weight: 600; color: #a5b4fc;">{{ p.peer }}</td>
+                  <td style="font-family: monospace;">{{ p.packets }}</td>
+                  <td style="font-family: monospace;">{{ p.bytes | filesizeformat }}</td>
+                  <td>
+                    <a href="{{ url_for('alerts.investigate_page', ip=p.peer) }}" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;">
+                      Pivot &rarr;
+                    </a>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="4" style="color: var(--text-dim); text-align: center;">No inbound sender peers observed.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ports and Protocols -->
+    <div class="grid-2">
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h4 class="card-title">🔌 Targeted Destination Ports</h4>
+        </div>
+        <div class="table-responsive">
+          <table class="soc-table">
+            <thead>
+              <tr>
+                <th>Port</th>
+                <th>Packet Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pt in details.ports_targeted %}
+                <tr>
+                  <td style="font-family: monospace; font-weight: 600; color: var(--accent-cyan);">{{ pt.dst_port }}</td>
+                  <td style="font-family: monospace;">{{ pt.count }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="2" style="color: var(--text-dim); text-align: center;">No targeted destination ports.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h4 class="card-title">🌐 Observed Protocols</h4>
+        </div>
+        <div class="table-responsive">
+          <table class="soc-table">
+            <thead>
+              <tr>
+                <th>Protocol</th>
+                <th>Packet Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pr in details.protocols_used %}
+                <tr>
+                  <td><span class="badge badge-proto">{{ pr.protocol }}</span></td>
+                  <td style="font-family: monospace;">{{ pr.count }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="2" style="color: var(--text-dim); text-align: center;">No protocols observed.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related Threat Alerts -->
+    {% if details.related_alerts %}
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h4 class="card-title">⚡ Threat Alerts Involving {{ details.ip }}</h4>
+        </div>
+        <div class="table-responsive">
+          <table class="soc-table">
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Severity</th>
+                <th>Detection Rule</th>
+                <th>Trigger Summary</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in details.related_alerts %}
+                <tr>
+                  <td style="font-family: monospace; font-weight: 700; color: var(--accent-cyan);">{{ a.rule_id }}</td>
+                  <td><span class="badge badge-{{ a.severity | lower }}">{{ a.severity }}</span></td>
+                  <td style="font-weight: 600;">{{ a.rule_name }}</td>
+                  <td style="color: var(--text-muted); font-size: 0.85rem;">{{ a.trigger_summary }}</td>
+                  <td><span class="badge badge-status badge-status-{{ a.status | lower }}">{{ a.status }}</span></td>
+                  <td>
+                    <a href="{{ url_for('alerts.alert_detail', alert_id=a.id) }}" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">
+                      Investigate &rarr;
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Activity Packet Timeline -->
+    <div class="card">
+      <div class="card-header">
+        <h4 class="card-title">⏱️ Activity Timeline Sample</h4>
+        <span style="font-size: 0.72rem; color: var(--text-dim);">First 30 chronological packets involving this endpoint</span>
+      </div>
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>Time (UTC)</th>
+              <th>Source</th>
+              <th>Destination</th>
+              <th>Proto</th>
+              <th>Length</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in details.timeline %}
+              <tr>
+                <td style="font-family: monospace; font-weight: 600; color: var(--accent-cyan);">{{ t.packet_index }}</td>
+                <td style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">{{ t.time_iso.split(' ')[1] }}</td>
+                <td style="font-family: monospace; {% if t.src_ip == details.ip %}color: var(--accent-cyan); font-weight: 600;{% endif %}">{{ t.src_ip }}{% if t.src_port %}:{{ t.src_port }}{% endif %}</td>
+                <td style="font-family: monospace; {% if t.dst_ip == details.ip %}color: #a5b4fc; font-weight: 600;{% endif %}">{{ t.dst_ip }}{% if t.dst_port %}:{{ t.dst_port }}{% endif %}</td>
+                <td><span class="badge badge-proto">{{ t.protocol }}</span></td>
+                <td style="font-family: monospace;">{{ t.length }} B</td>
+                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ t.summary }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7" style="color: var(--text-dim); text-align: center;">No activity packets found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  {% elif selected_ip %}
+    <p style="color: var(--text-dim); text-align: center; padding: 2rem;">No communication records found for IP {{ selected_ip }}.</p>
+  {% else %}
+    <div style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+      <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+      <p>Select any observed IP address above to inspect its communication partners, protocols, targeted ports, and linked threat alerts.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

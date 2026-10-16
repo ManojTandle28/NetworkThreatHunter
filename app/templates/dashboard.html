@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}SOC Dashboard — NetworkThreatHunter{% endblock %}
+
+{% block content %}
+{% if not capture %}
+  <!-- Empty State / Welcome Hero -->
+  <div class="card" style="text-align: center; padding: 3.5rem 2rem; max-width: 800px; margin: 2rem auto;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">🛡️</div>
+    <h2 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.75rem;">Network Traffic Threat Hunting Platform</h2>
+    <p style="color: var(--text-muted); max-width: 580px; margin: 0 auto 2rem; font-size: 0.95rem;">
+      Upload a packet capture (<code style="color: var(--accent-cyan);">.pcap</code> or <code style="color: var(--accent-cyan);">.pcapng</code>) for offline inspection, protocol profiling, flow reconstruction, and deterministic threat-hunting heuristics.
+    </p>
+
+    <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+      <button type="button" class="btn btn-primary" onclick="document.getElementById('upload-modal').classList.add('active')">
+        ⬆️ Upload PCAP File (Max 25 MB)
+      </button>
+
+      <form action="{{ url_for('main.load_demo') }}" method="POST">
+        <button type="submit" class="btn btn-accent">
+          ⚡ Launch Demonstration Capture
+        </button>
+      </form>
+    </div>
+
+    <div style="margin-top: 3rem; text-align: left; background: #0c1220; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+      <h4 style="font-size: 0.85rem; color: var(--accent-cyan); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 0.05em;">
+        Demonstration Capture Contains:
+      </h4>
+      <ul style="font-size: 0.85rem; color: var(--text-muted); padding-left: 1.25rem; line-height: 1.7;">
+        <li>Normal baseline DNS lookups, TCP handshakes, and diagnostic ICMP pings.</li>
+        <li><strong>NTH-001:</strong> Reconnaissance port scan sequence (16 distinct ports probed).</li>
+        <li><strong>NTH-002:</strong> Rapid TCP SYN connection burst (&gt;20 attempts/second).</li>
+        <li><strong>NTH-003:</strong> Anomalously long domain queries indicating potential DNS tunneling/DGA.</li>
+        <li><strong>NTH-004:</strong> Traffic directed to suspicious backdoor indicator port (4444).</li>
+        <li><strong>NTH-005:</strong> Cleartext HTTP and legacy protocol exposures.</li>
+        <li><strong>NTH-006:</strong> Oversized ICMP echo payload anomaly.</li>
+      </ul>
+    </div>
+  </div>
+
+{% else %}
+  <!-- Active Capture SOC Dashboard -->
+  {% if capture.is_demo %}
+    <div class="demo-banner">
+      <div>
+        ⚠️ <strong>SYNTHETIC DEMONSTRATION TRAFFIC:</strong> This dataset was generated locally for algorithmic verification and educational threat hunting. It does not represent live production network data.
+      </div>
+      <span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">Simulated Capture</span>
+    </div>
+  {% endif %}
+
+  <!-- Top Metrics Bar -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Total Packets</span>
+      <span class="stat-value">{{ stats.total_packets | number_format if stats else capture.packet_count }}</span>
+      <span class="stat-subtext">Captured across {{ stats.duration_seconds }}s</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Observed Traffic</span>
+      <span class="stat-value">{{ stats.total_bytes | filesizeformat }}</span>
+      <span class="stat-subtext">Raw wire bytes analyzed</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Endpoint Diversity</span>
+      <span class="stat-value">{{ stats.unique_src_ips }} <span style="font-size: 1rem; color: var(--text-dim); font-weight: 400;">src</span> / {{ stats.unique_dst_ips }} <span style="font-size: 1rem; color: var(--text-dim); font-weight: 400;">dst</span></span>
+      <span class="stat-subtext">Unique observed IP addresses</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Threat Alerts</span>
+      <span class="stat-value" style="color: {% if alerts_summary.high > 0 or alerts_summary.critical > 0 %}#f87171{% else %}#38bdf8{% endif %};">
+        {{ alerts_summary.total }}
+      </span>
+      <span class="stat-subtext">
+        <span style="color: #f87171; font-weight: 600;">{{ alerts_summary.high + alerts_summary.critical }} High/Crit</span> &bull;
+        <span style="color: #facc15; font-weight: 600;">{{ alerts_summary.medium }} Med</span> &bull;
+        <span style="color: #60a5fa; font-weight: 600;">{{ alerts_summary.low }} Low</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Row 1: Charts (Traffic Over Time & Protocol Distribution) -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📈 Traffic Volume Over Time</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Packets per interval</span>
+      </div>
+      <div id="chart-timeline" class="chart-container">
+        <!-- SVG timeline chart -->
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🌐 Protocol Breakdown</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Observed packet layers</span>
+      </div>
+      <div id="chart-protocols" style="padding-top: 0.5rem;">
+        <!-- Visual bars -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Top Talkers -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📤 Top Source Endpoints</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Ranked by packet volume</span>
+      </div>
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Source IP</th>
+              <th>Packets</th>
+              <th>Bytes</th>
+              <th>Share</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in stats.top_src_ips[:6] %}
+              <tr>
+                <td style="font-family: monospace; font-weight: 600; color: var(--accent-cyan);">{{ s.ip }}</td>
+                <td style="font-family: monospace;">{{ s.packet_count }}</td>
+                <td style="font-family: monospace;">{{ s.byte_count | filesizeformat }}</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 0.4rem;">
+                    <div style="flex: 1; height: 5px; background: var(--bg-input); border-radius: 3px; overflow: hidden; width: 60px;">
+                      <div style="width: {{ s.percentage }}%; height: 100%; background: #0ea5e9;"></div>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">{{ s.percentage }}%</span>
+                  </div>
+                </td>
+                <td>
+                  <a href="{{ url_for('alerts.investigate_page', ip=s.ip) }}" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.45rem;">
+                    Investigate
+                  </a>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" style="color: var(--text-dim); text-align: center;">No IP data observed</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📥 Top Destination Endpoints</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Ranked by packet volume</span>
+      </div>
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Destination IP</th>
+              <th>Packets</th>
+              <th>Bytes</th>
+              <th>Share</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in stats.top_dst_ips[:6] %}
+              <tr>
+                <td style="font-family: monospace; font-weight: 600; color: #a5b4fc;">{{ d.ip }}</td>
+                <td style="font-family: monospace;">{{ d.packet_count }}</td>
+                <td style="font-family: monospace;">{{ d.byte_count | filesizeformat }}</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 0.4rem;">
+                    <div style="flex: 1; height: 5px; background: var(--bg-input); border-radius: 3px; overflow: hidden; width: 60px;">
+                      <div style="width: {{ d.percentage }}%; height: 100%; background: #8b5cf6;"></div>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">{{ d.percentage }}%</span>
+                  </div>
+                </td>
+                <td>
+                  <a href="{{ url_for('alerts.investigate_page', ip=d.ip) }}" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.45rem;">
+                    Investigate
+                  </a>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" style="color: var(--text-dim); text-align: center;">No IP data observed</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Ports & Reconstructed TCP Flows -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🔌 Active Ports & Services</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Observed destination ports</span>
+      </div>
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Port</th>
+              <th>Service Mapping</th>
+              <th>Packets</th>
+              <th>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in stats.top_ports[:6] %}
+              <tr>
+                <td style="font-family: monospace; font-weight: 600; color: var(--accent-cyan);">{{ p.port }}</td>
+                <td style="color: var(--text-muted);">{{ p.service }}</td>
+                <td style="font-family: monospace;">{{ p.count }}</td>
+                <td>{{ p.percentage }}%</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" style="color: var(--text-dim); text-align: center;">No port data observed</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🔄 TCP Connection Summaries</h3>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Reconstructed session flows</span>
+      </div>
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Flow (Source &harr; Destination)</th>
+              <th>Packets</th>
+              <th>State</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in stats.tcp_flows[:6] %}
+              <tr>
+                <td style="font-family: monospace; font-size: 0.78rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  {{ f.flow_key }}
+                </td>
+                <td style="font-family: monospace;">{{ f.packet_count }}</td>
+                <td>
+                  {% if f.state == 'ESTABLISHED' %}
+                    <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">ESTABLISHED</span>
+                  {% elif f.state == 'RESET' %}
+                    <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">RESET</span>
+                  {% elif f.state == 'CLOSED' %}
+                    <span class="badge" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8;">CLOSED</span>
+                  {% else %}
+                    <span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">{{ f.state }}</span>
+                  {% endif %}
+                </td>
+                <td style="font-family: monospace;">{{ f.duration }}s</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" style="color: var(--text-dim); text-align: center;">No TCP flows reconstructed</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.5rem;">
+        * Notice: PCAP captures may capture partial traffic bursts. Reconstructed flow states represent observed packet evidence and do not imply guaranteed state verification.
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 4: Recent Threat Alerts -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">⚡ Threat Hunting Findings</h3>
+      <a href="{{ url_for('alerts.alerts_list') }}" class="btn btn-secondary btn-sm">
+        View All Alerts ({{ alerts_summary.total }}) &rarr;
+      </a>
+    </div>
+
+    {% if alerts_summary.recent %}
+      <div class="table-responsive">
+        <table class="soc-table">
+          <thead>
+            <tr>
+              <th>Rule ID</th>
+              <th>Severity</th>
+              <th>Rule Title</th>
+              <th>Trigger Summary</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in alerts_summary.recent %}
+              <tr>
+                <td style="font-family: monospace; font-weight: 700; color: var(--accent-cyan);">{{ a.rule_id }}</td>
+                <td>
+                  <span class="badge badge-{{ a.severity | lower }}">{{ a.severity }}</span>
+                </td>
+                <td style="font-weight: 600;">{{ a.rule_name }}</td>
+                <td style="color: var(--text-muted); max-width: 400px;">{{ a.trigger_summary }}</td>
+                <td>
+                  <span class="badge badge-status badge-status-{{ a.status | lower }}">{{ a.status }}</span>
+                </td>
+                <td>
+                  <a href="{{ url_for('alerts.alert_detail', alert_id=a.id) }}" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">
+                    Investigate
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0;">No suspicious threat indicators observed in this capture.</p>
+    {% endif %}
+  </div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if stats %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const timeBuckets = {{ stats.time_buckets | tojson | safe }};
+    const protoDist = {{ stats.protocol_distribution | tojson | safe }};
+
+    NthCharts.renderTimelineChart('chart-timeline', timeBuckets);
+    NthCharts.renderProtocolBars('chart-protocols', protoDist);
+
+    // Re-render chart on resize
+    window.addEventListener('resize', () => {
+      NthCharts.renderTimelineChart('chart-timeline', timeBuckets);
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

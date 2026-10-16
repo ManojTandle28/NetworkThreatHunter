@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Application Data
+uploads/*
+!uploads/.gitkeep
+data/*
+!data/.gitkeep
+instance/
+*.db
+*.sqlite3
+*.log
+
+# Environment
+.env
+.env.local
+
+# IDE & OS Artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
